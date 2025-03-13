@@ -2,7 +2,7 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <title>IA d'échecs : Entraînement et Jeu</title>
+    <title>IA d'échecs : Entraînement et Jeu (modif chess 1)</title>
     <!-- CSS de Chessboard.js -->
     <link rel="stylesheet" href="https://qualitesite.com/popular_chess_deep/css/chessboard.css" />
     <!-- Inclusion de jQuery (obligatoire pour Chessboard.js) -->
