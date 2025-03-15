@@ -12,7 +12,7 @@ Ce projet est une intelligence artificielle d'échecs développée en JavaScript
 ## Prérequis
 
 - Un navigateur web moderne.
-- (Optionnel) Node.js si vous souhaitez lancer un serveur local pour tester l'application.
+- Une bonne dose de patience pour faire entraîner l'ia noire
 
 ## Installation
 
