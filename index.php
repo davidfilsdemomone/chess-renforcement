@@ -1593,7 +1593,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           const now = Date.now();
           const elapsed = now - lastNextFrameTime;
           if ((elapsed >= 100) && (!document.getElementById('plus_rapide').checked)) {
-            // On met à jour le timestamp et on renvoie une promesse qui se résout immédiatement (ou après 0ms)
+           
             lastNextFrameTime = now;
           
             return new Promise(resolve => setTimeout(resolve, 0));
@@ -1601,8 +1601,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           } else if (document.getElementById('plus_rapide').checked) {
 
             return true;
-          }
-          // Si moins de 500 ms se sont écoulées, on ne renvoie rien (=> undefined, await se résout immédiatement)
+          }         
         }
 
         async function updateUI() {
