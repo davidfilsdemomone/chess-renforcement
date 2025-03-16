@@ -619,21 +619,12 @@ function toggleTurn(game) {
 function orderMoves(game, moves, isMaximizingPlayer, useHybrid, ply = 0, maxMoves = null) {
   const killerBonus = 100000; // Bonus arbitraire pour le killer move
   const currentType = isMaximizingPlayer ? 'max' : 'min';
-  
-  // Valeurs classiques pour les pièces (en centipawns)
-  const pieceValue = pieceValues;
 
   moves.forEach(move => {
     // On effectue le coup et on évalue la position
     game.move(move);
     let baseScore = useHybrid ? evaluatePositionHybrid(game) : evaluatePosition(game);
     game.undo();
-
-    // Bonus capture : si le coup capture une pièce, on lui ajoute un bonus basé sur la valeur capturée.
-    if (move.captured) {
-      const capVal = pieceValue[move.captured.toLowerCase()] || 0;
-      baseScore += capVal;
-    }
     
     move.order = baseScore;
     
