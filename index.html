@@ -614,55 +614,69 @@ function toggleTurn(game) {
   return new Chess(parts.join(" "));
 }
 
- function orderMoves(game, moves, isMaximizingPlayer, useHybrid, ply = 0) {
+// --- Fonction orderMoves ---
+// Amélioration : ajout d'un bonus pour les captures et passage d'un paramètre optionnel maxMoves
+function orderMoves(game, moves, isMaximizingPlayer, useHybrid, ply = 0, maxMoves = null) {
   const killerBonus = 100000; // Bonus arbitraire pour le killer move
   const currentType = isMaximizingPlayer ? 'max' : 'min';
+  
+  // Valeurs classiques pour les pièces (en centipawns)
+  const pieceValue = { 'p': 100, 'n': 300, 'b': 300, 'r': 500, 'q': 900, 'k': 20000 };
 
-  // Calculer pour chaque coup son score de base et le bonus killer (le cas échéant)
   moves.forEach(move => {
+    // On effectue le coup et on évalue la position
     game.move(move);
     let baseScore = useHybrid ? evaluatePositionHybrid(game) : evaluatePosition(game);
     game.undo();
+
+    // Bonus capture : si le coup capture une pièce, on lui ajoute un bonus basé sur la valeur capturée.
+    if (move.captured) {
+      const capVal = pieceValue[move.captured.toLowerCase()] || 0;
+      baseScore += capVal;
+    }
+    
     move.order = baseScore;
     
+    // Bonus killer move (selon si le coup a déjà provoqué un cutoff dans ce ply)
     let bonus = 0;
     if (killerMoves[ply] && killerMoves[ply].some(k => k.from === move.from && k.to === move.to)) {
       const killerEntry = killerMoves[ply].find(k => k.from === move.from && k.to === move.to);
-      // Si le killer move a été enregistré dans un nœud du même type, lui donner un bonus positif, sinon négatif
       bonus = (killerEntry.killerType === currentType) ? killerBonus : -killerBonus;
     }
     move.killerBonus = bonus;
   });
 
-  // Tri à deux niveaux : d'abord par la valeur de l'évaluation (ordermove)
-  // Puis, en cas d'égalité, par le bonus killer
+  // Tri en deux niveaux : d'abord sur l'évaluation, puis sur le bonus killer en cas d'égalité
   moves.sort((a, b) => {
     if (a.order === b.order) {
-      // Pour le maximisateur, le bonus le plus élevé est meilleur ; pour le minimisateur, le bonus le plus bas est préférable
       return isMaximizingPlayer ? b.killerBonus - a.killerBonus : a.killerBonus - b.killerBonus;
     }
     return isMaximizingPlayer ? b.order - a.order : a.order - b.order;
   });
-
-  // Retourner seulement les 5 meilleurs coups
-  return moves.slice(0, 6);
+  
+  // Optionnellement, limiter le nombre de coups pour accélérer la recherche (attention à la perte potentielle de qualité)
+  if (maxMoves !== null) {
+    return moves.slice(0, maxMoves);
+  }
+  return moves;
 }
 
 
+// --- Fonction isSquareAttacked ---
+// Vérifie si une case donnée est attaquée par une pièce d'une couleur spécifiée.
 function isSquareAttacked(game, square, attackerColor) {
-  // On récupère les coups du joueur de la couleur attaquante
   let opponentMoves = game.moves({ verbose: true });
   return opponentMoves.some(m => m.to === square && m.color === attackerColor);
 }
 
 const TIE_BREAK_FACTOR = 0.001; // Ajustez ce facteur selon vos besoins
 
+// --- Fonction asyncMinimaxAlphaBetaTimed ---
+// Recherche en profondeur en utilisant l'algorithme alpha-beta, avec gestion asynchrone, transposition, null-move pruning, futility pruning et extensions pour les coups donnant échec.
 async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizingPlayer, useHybrid, endTime, ply = 0) {
-  
   await nextFrame();  
 
   if (interrompre_partie_en_cours_entrainement) {
-
     return 0;
   }
 
@@ -691,7 +705,15 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
     return evalScore;
   }
 
-  // Null‑move pruning
+  // Futility Pruning pour les nœuds peu profonds (par exemple, profondeur == 1) en l'absence d'échec
+  if (depth === 1 && !node.in_check()) {
+    const staticEval = useHybrid ? await evaluatePositionHybrid(node) : evaluatePosition(node);
+    const futilityMargin = 50; // à ajuster selon vos tests
+    if (isMaximizingPlayer && staticEval + futilityMargin < alpha) return staticEval;
+    if (!isMaximizingPlayer && staticEval - futilityMargin > beta) return staticEval;
+  }
+
+  // Null‑move pruning : essayer de passer son tour dans les positions calmes pour détecter rapidement un cutoff
   if (depth >= 3 && !node.in_check() && ply > 0) {
     const moves = node.moves({ verbose: true });
     const currentHasImmediateThreat = moves.some(m => m.captured || m.check);
@@ -718,29 +740,30 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
   }
 
   // Récupérer et trier les coups avec orderMoves
+  // Vous pouvez, si besoin, limiter le nombre de coups (par exemple, maxMoves = 5) en phase de recherche très profonde.
   let moves = node.moves({ verbose: true });
-  moves = orderMoves(node, moves, isMaximizingPlayer, useHybrid, ply);
+  moves = orderMoves(node, moves, isMaximizingPlayer, useHybrid, ply /*, maxMoves optionnel */);
 
   let bestEval;
   // Cas maximisant
   if (isMaximizingPlayer) {
     bestEval = -Infinity;
-
     await nextFrame();
 
     for (let move of moves) {
-
       if (interrompre_partie_en_cours_entrainement) {
-
         return 0;
       }
-
       customMove(node, move);
-      let extension = 0;
+      
+      // Extension : si le coup donne échec, on augmente légèrement la profondeur
+      let extension = move.check ? 1 : 0;
       const newDepth = depth - 1 + extension;
+      
       let evalScore = await asyncMinimaxAlphaBetaTimed(node, newDepth, alpha, beta, !isMaximizingPlayer, useHybrid, endTime, ply + 1);
       customUndo(node);
-      // Incorporer le tie-break basé sur move.order
+      
+      // Tie-break basé sur move.order
       const tieBreak = (typeof move.order !== "undefined" ? move.order : 0) * TIE_BREAK_FACTOR;
       let candidateScore = evalScore + tieBreak;
       
@@ -756,6 +779,7 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
             killerMoves[ply].push(move);
           }
         }
+
         if (!document.getElementById('break_en_moins').checked) {
           let flag = EXACT;
           if (bestEval <= alpha) flag = UPPERBOUND;
@@ -773,11 +797,14 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
     bestEval = Infinity;
     for (let move of moves) {
       customMove(node, move);
-      let extension = 0;
+      
+      let extension = move.check ? 1 : 0;
       const newDepth = depth - 1 + extension;
+      
       let evalScore = await asyncMinimaxAlphaBetaTimed(node, newDepth, alpha, beta, !isMaximizingPlayer, useHybrid, endTime, ply + 1);
       customUndo(node);
-      // Incorporer le tie-break : pour Min, on soustrait move.order
+      
+      // Tie-break : pour Min, on soustrait move.order
       const tieBreak = (typeof move.order !== "undefined" ? move.order : 0) * TIE_BREAK_FACTOR;
       let candidateScore = evalScore + tieBreak;
       
@@ -799,7 +826,7 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
           else if (bestEval >= beta) flag = LOWERBOUND;
           transpositionTable.set(key, { value: bestEval, depth: depth, flag: flag });
           return bestEval;
-        }
+       } 
       }
       
       beta = Math.min(beta, bestEval);
