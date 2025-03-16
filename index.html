@@ -644,8 +644,10 @@ function toggleTurn(game) {
     return isMaximizingPlayer ? b.order - a.order : a.order - b.order;
   });
 
-  return moves;
+  // Retourner seulement les 5 meilleurs coups
+  return moves.slice(0, 5);
 }
+
 
 function isSquareAttacked(game, square, attackerColor) {
   // On récupère les coups du joueur de la couleur attaquante
