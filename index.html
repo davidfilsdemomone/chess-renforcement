@@ -48,7 +48,7 @@
       <h2>Entraînement de l'IA</h2>
 
       <br />
-      Profondeur de calcul pour l'entraînement : <input type="text" name="prof_entrainement" id="prof_entrainement" value="3" size="3"><br /><br />
+      Profondeur de calcul pour l'entraînement : <input type="text" name="prof_entrainement" id="prof_entrainement" value="6" size="3"><br /><br />
 
       <input name="entierement_prof_train" id="entierement_prof_train" type="checkbox">
       Parcourir entièrement la profondeur pour l'ia du réseau neuronaux
@@ -101,7 +101,7 @@
       <div id="mode-info">Mode : Joueur vs IA entraînée (IA = Noirs)</div>
       <div id="scoreboard" class="scorestr">Score: Blancs: 0 | Noirs: 0</div>
       <br />
-      Tps par coup (ms) : <input type="text" size="5" id="tps_per_coup" value="1000"> - Profondeur : <input type="text" size="2" id="prof_max" value="0"> / Profondeur max : <input type="text" size="2" id="profondeur_max" value="4">
+      Tps par coup (ms) : <input type="text" size="5" id="tps_per_coup" value="1000"> - Profondeur : <input type="text" size="2" id="prof_max" value="0"> / Profondeur max : <input type="text" size="2" id="profondeur_max" value="15">
       <br /><input name="check_tps" id="check_tps" type="checkbox" checked="checked">
       Ignorer le temps (calculer jusqu'à la profondeur max)
       <br /><input name="entierement_prof" id="entierement_prof" type="checkbox">
@@ -110,6 +110,9 @@
       Fonction d'évaluation plus précise (réfléchi plus longtemps)
       <br /><input name="break_en_moins" id="break_en_moins" type="checkbox">
       Fonction alphabeta plus précise mais plus longue (on retire la coupure break)
+      <br /><input type="checkbox" id="stockfish_move" checked="checked">
+      Jouer coup Stockfish
+      
     <div style="display: flex; justify-content: center;">
     <div id="value_chessboard">Valeur de l'échiquier : 0 pts</div>
     <div>&nbsp;/&nbsp;</div>
@@ -172,6 +175,101 @@
       // Replay buffer global pour accumuler les expériences de plusieurs parties
       let replayBuffer = [];
 
+      // --- Intégration de Stockfish ---
+      let stockfishEngine;
+      function initStockfish() {
+        // Assurez-vous que "stockfish.js" est accessible dans le même répertoire ou ajustez le chemin.
+        stockfishEngine = new Worker('stockfish.js');
+        stockfishEngine.onmessage = function(e) {
+          console.log("Stockfish:", e.data);
+        };
+        stockfishEngine.postMessage("uci");
+        stockfishEngine.postMessage("isready");
+      }
+      // Renvoie un tableau d'évaluations pour tous les coups légaux en une seule recherche MultiPV.
+      function getLegalMovesWithScores(game, maxDepth = 15) {
+        return new Promise((resolve, reject) => {
+          const fen = game.fen();
+          const legalMoves = game.moves({ verbose: true });
+          const multiPV = legalMoves.length; // Évaluer tous les coups légaux
+          const worker = new Worker('stockfish.js'); // Assurez-vous que stockfish.js est accessible
+
+          let evaluations = []; // Tableau pour stocker les évaluations
+
+          // Initialisation de Stockfish
+          worker.postMessage("uci");
+          worker.postMessage("isready");
+          worker.postMessage("setoption name MultiPV value " + multiPV);
+          worker.postMessage("position fen " + fen);
+          worker.postMessage("go depth " + maxDepth);
+
+          function onMessage(e) {
+            if (typeof e.data === "string") {
+              // On recherche les messages de type "info ... multipv ..."
+              if (e.data.startsWith("info") && e.data.indexOf("multipv") !== -1) {
+                const tokens = e.data.split(" ");
+                let multipvIndex = null;
+                let scoreType = null;
+                let scoreValue = null;
+                let pvMove = null;
+                for (let i = 0; i < tokens.length; i++) {
+                  if (tokens[i] === "multipv" && i + 1 < tokens.length) {
+                    multipvIndex = parseInt(tokens[i + 1], 10);
+                  }
+                  if (tokens[i] === "score" && i + 2 < tokens.length) {
+                    scoreType = tokens[i + 1];
+                    scoreValue = parseInt(tokens[i + 2], 10);
+                  }
+                  if (tokens[i] === "pv" && i + 1 < tokens.length) {
+                    pvMove = tokens[i + 1];
+                    break; // On prend le premier coup de la variation PV
+                  }
+                }
+                if (multipvIndex !== null && scoreType && scoreValue !== null && pvMove) {
+                  // Stocke l'évaluation à l'indice multipvIndex - 1
+                  evaluations[multipvIndex - 1] = { move: pvMove, scoreType, scoreValue, multipv: multipvIndex };
+                }
+              }
+              // Quand Stockfish envoie "bestmove", la recherche est terminée.
+              if (e.data.startsWith("bestmove")) {
+                worker.removeEventListener("message", onMessage);
+                worker.terminate();
+                resolve(evaluations);
+              }
+            }
+          }
+          worker.addEventListener("message", onMessage);
+        });
+      }
+
+      // Parcourt les évaluations obtenues et renvoie le meilleur coup selon le joueur à jouer.
+      // Pour uniformiser la comparaison, on inverse le score pour les noirs.
+      async function getBestMoveFromEvaluations(game, maxDepth = 15) {
+        const evaluations = await getLegalMovesWithScores(game, maxDepth);
+        const turn = game.turn();
+        let bestMove = null;
+        let bestScore = -Infinity;
+        
+        evaluations.forEach(evaluation => {
+          if (evaluation) {
+            let score = evaluation.scoreValue;
+            // Pour les évaluations de type "mate", on convertit en une valeur numérique élevée.
+            if (evaluation.scoreType === "mate") {
+              score = evaluation.scoreValue > 0 ? 100000 - evaluation.scoreValue : -100000 - evaluation.scoreValue;
+            }
+            // Pour les noirs, on inverse le score afin que le meilleur coup ait toujours la valeur la plus élevée.
+            /*if (turn === 'b') {
+              score = -score;
+            }*/
+            if (score > bestScore) {
+              bestScore = score;
+              bestMove = evaluation.move;
+            }
+          }
+        });
+        return { bestMove, evaluations };
+      }
+
       // Fonction pour charger ou créer le modèle
       async function getOrCreateModel() {
         const inputSize = 64;
@@ -210,7 +308,15 @@
       }
 
       // Wrappers pour mettre à jour le compteur de coups dans game
-      function customMove(game, move) {
+      function customMove(game, move, notation=false) {
+
+        var super_move = move;
+
+        if (notation) {
+
+          super_move = uciToMove(move);
+        }
+
         const result = game.move(move);
         if (result) {
           if (typeof game.totalMoves !== 'number') {
@@ -269,6 +375,8 @@
 
       document.addEventListener("DOMContentLoaded", async function() {
         console.log("Chessboard:", window.Chessboard);
+
+        initStockfish();
 
         // Charger ou créer le modèle
         model = await getOrCreateModel();
@@ -1059,6 +1167,18 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
         }
 
         async function chooseMoveWhite(game, color_piece) {
+
+          if (document.getElementById("stockfish_move") && document.getElementById("stockfish_move").checked) {
+
+            var best2 = await stockfish_chooseMove(game, true);
+
+            let chosenMove = best2 ? best2.from + best2.to + (best2.promotion ? best2.promotion : "") : "";
+
+            //console.log("chosenMove usehybrid=true : " + chosenMove);
+
+            return chosenMove;
+          }
+
           let legalVerbose = game.moves({ verbose: true });
           for (let move of legalVerbose) {
             let gameCopy = new Chess(game.fen());
@@ -1079,6 +1199,18 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
         }
 
         async function chooseMoveBlack(game, color_piece) {
+
+          if (document.getElementById("stockfish_move") && document.getElementById("stockfish_move").checked) {
+
+            var best2 = await stockfish_chooseMove(game, false);
+
+            let chosenMove = best2 ? best2.from + best2.to + (best2.promotion ? best2.promotion : "") : "";
+
+            //console.log("chosenMove usehybrid=false : " + chosenMove);
+
+            return chosenMove;
+          }
+
           let depth = is_entrainement ? (Math.floor(Math.random() * 2) + 1) : 5;
           var tps = parseInt(document.getElementById('tps_per_coup').value, 10);
           let best = await jouerCoupAvecDelaiTimed(game, depth, false, tps);
@@ -1091,7 +1223,85 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return chosenMove;
         }
 
+        async function stockfish_chooseMove(game, useHybrid = false) {
+
+            var maxDepth;
+
+            if (!is_entrainement) {
+
+              maxDepth = parseInt(document.getElementById('profondeur_max').value, 10)-1;
+            
+            } else {
+
+              maxDepth = parseInt(document.getElementById('prof_entrainement').value, 10)-1;
+            }
+
+            let gameCopy = new Chess(game.fen());
+
+            const result = await getBestMoveFromEvaluations(game, maxDepth);
+
+            game = gameCopy;
+            
+            if (!is_entrainement) {
+
+              console.log("Liste des coups évalués par Stockfish :");
+
+              result.evaluations.forEach(evaluation => {
+              
+                console.log(`Coup: ${evaluation.move} - Evaluation normale = ${evaluation.scoreValue}`);
+              });
+            }
+
+            var tab_eval = result.evaluations;
+
+            var bestMoves = [];
+
+            var record_score = -Infinity;
+
+            for (var evaluate of tab_eval) {
+
+              if (evaluate.scoreValue > record_score) {
+
+                record_score = evaluate.scoreValue;
+
+                bestMoves = [evaluate.move];
+              
+              } else if (evaluate.scoreValue == record_score) {
+
+                bestMoves.push(evaluate.move);
+              }
+            }
+
+            if ((useHybrid) && (!((document.getElementById("entierement_prof_train").checked && is_entrainement) || (document.getElementById('entierement_prof').checked)))) {
+              
+              let moveEvaluations = [];
+
+              for (let move of bestMoves) {
+
+                customMove(game, move);
+                let pts = evaluatePositionHybrid2(game, false, 0);
+                customUndo(game);
+                moveEvaluations.push({ move: move, evaluation: pts });
+              }
+              moveEvaluations.sort((a, b) => b.evaluation - a.evaluation);
+              bestValue = moveEvaluations[0].evaluation;
+              bestMoves = moveEvaluations.filter(item => item.evaluation === bestValue)
+                                         .map(item => item.move);
+              if (!is_entrainement) {
+                console.log("%cListe des " + bestMoves.length + " coups hybrides : ", "color:red");
+                bestMoves.forEach(item => {
+                  console.log(`Coup: ${item} - évaluation hybride: ${bestValue}`);
+                });
+              }
+            }
+
+            var move_best = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+
+            return uciToMove(move_best);
+        }
+
         async function chooseMove(game) {
+
           let turn = game.turn();
           document.getElementById('tour_joueur').innerText =
             (turn === 'w') ? "C'est aux blancs de jouer !" : "C'est aux noirs de jouer !";
@@ -1684,7 +1894,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
         return {
           from: uci.substring(0, 2),
           to: uci.substring(2, 4),
-          promotion: (uci.length > 4 ? uci.substring(4) : undefined)
+          promotion: (uci.length > 4 ? uci.substring(4) : null)
         };
       }
     </script>
