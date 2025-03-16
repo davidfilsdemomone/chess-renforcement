@@ -621,7 +621,7 @@ function orderMoves(game, moves, isMaximizingPlayer, useHybrid, ply = 0, maxMove
   const currentType = isMaximizingPlayer ? 'max' : 'min';
   
   // Valeurs classiques pour les pièces (en centipawns)
-  const pieceValue = { 'p': 100, 'n': 300, 'b': 300, 'r': 500, 'q': 900, 'k': 20000 };
+  const pieceValue = pieceValues;
 
   moves.forEach(move => {
     // On effectue le coup et on évalue la position
@@ -660,7 +660,6 @@ function orderMoves(game, moves, isMaximizingPlayer, useHybrid, ply = 0, maxMove
   }
   return moves;
 }
-
 
 // --- Fonction isSquareAttacked ---
 // Vérifie si une case donnée est attaquée par une pièce d'une couleur spécifiée.
