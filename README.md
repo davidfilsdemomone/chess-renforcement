@@ -1,6 +1,6 @@
 # IA d'échecs en JavaScript/HTML/CSS
 
-Ce projet est une intelligence artificielle d'échecs développée en JavaScript, HTML et CSS. L'IA utilise TensorFlow pour implémenter un système d'apprentissage automatique qui lui permet d'apprendre de ses erreurs et d'améliorer ses performances au fil des parties.
+Ce projet est une intelligence artificielle d'échecs développée en JavaScript, HTML et CSS. L'IA utilise TensorFlow et StockFish légèrement remanié pour implémenter un système d'apprentissage automatique qui lui permet d'apprendre de ses erreurs et d'améliorer ses performances au fil des parties.
 
 ## Caractéristiques
 
