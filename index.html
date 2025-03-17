@@ -1285,10 +1285,24 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
               
               let moveEvaluations = [];
 
+              if (!is_entrainement) {
+
+                console.log("%cEvaluation de tous les coups hybrides par rapport aux coups stockfish normaux les meilleurs :" ,"color:green");
+              }
+
               for (let move of bestMoves) {
 
-                customMove(game, move);
+                var super_move = uciToMove(move);
+
+                customMove(game, super_move);
+
                 let pts = evaluatePositionHybrid2(game, false, 0);
+
+                if (!is_entrainement) {
+
+                  console.log("%c"+move + " - evaluation hybride : " + pts, "color:green"); 
+                }
+
                 customUndo(game);
                 moveEvaluations.push({ move: move, evaluation: pts });
               }
@@ -1297,9 +1311,9 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
               bestMoves = moveEvaluations.filter(item => item.evaluation === bestValue)
                                          .map(item => item.move);
               if (!is_entrainement) {
-                console.log("%cListe des " + bestMoves.length + " coups hybrides : ", "color:red");
+                console.log("%cListe des " + bestMoves.length + " coups hybrides les meilleurs : ", "color:red");
                 bestMoves.forEach(item => {
-                  console.log(`Coup: ${item} - évaluation hybride: ${bestValue}`);
+                  console.log(`%cCoup: ${item} - évaluation hybride: ${bestValue}`, "color:red");
                 });
               }
             }
