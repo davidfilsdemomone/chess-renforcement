@@ -243,32 +243,41 @@
       }
 
       // Parcourt les évaluations obtenues et renvoie le meilleur coup selon le joueur à jouer.
-      // Pour uniformiser la comparaison, on inverse le score pour les noirs.
       async function getBestMoveFromEvaluations(game, maxDepth = 15) {
-        const evaluations = await getLegalMovesWithScores(game, maxDepth);
-        const turn = game.turn();
-        let bestMove = null;
-        let bestScore = -Infinity;
-        
-        evaluations.forEach(evaluation => {
-          if (evaluation) {
+    const evaluations = await getLegalMovesWithScores(game, maxDepth);
+    const turn = game.turn(); // Qui joue : blanc ('w') ou noir ('b')
+    let bestMove = null;
+    let bestScore = -Infinity;
+
+    evaluations.forEach(evaluation => {
+        if (evaluation) {
             let score = evaluation.scoreValue;
-            // Pour les évaluations de type "mate", on convertit en une valeur numérique élevée.
+
+            // Pour les évaluations de type "mate", on affecte une valeur inversée par rapport à la profondeur du mate
+
             if (evaluation.scoreType === "mate") {
-              score = evaluation.scoreValue > 0 ? 100000 - evaluation.scoreValue : -100000 - evaluation.scoreValue;
+                // Si c'est un mate pour les blancs, plus X est grand, moins c'est bon.
+                // Donc on soustrait le nombre de coups nécessaires à 100000
+                if (evaluation.scoreValue > 0) {
+                    score = 100000 - Math.abs(evaluation.scoreValue); // Mate pour les blancs
+                } else {
+                    score = -100000 + Math.abs(evaluation.scoreValue); // Mate pour les noirs
+                }              
             }
-            // Pour les noirs, on inverse le score afin que le meilleur coup ait toujours la valeur la plus élevée.
-            /*if (turn === 'b') {
-              score = -score;
-            }*/
+
+            evaluation.scoreValue = score;
+
+            // On garde la meilleure évaluation
             if (score > bestScore) {
-              bestScore = score;
-              bestMove = evaluation.move;
+                bestScore = score;
+                bestMove = evaluation.move;
             }
-          }
-        });
-        return { bestMove, evaluations };
-      }
+        }
+    });
+
+    return { bestMove, evaluations };
+}
+
 
       // Fonction pour charger ou créer le modèle
       async function getOrCreateModel() {
