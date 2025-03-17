@@ -48,7 +48,7 @@
       <h2>Entraînement de l'IA</h2>
 
       <br />
-      Profondeur de calcul pour l'entraînement : <input type="text" name="prof_entrainement" id="prof_entrainement" value="6" size="3"><br /><br />
+      Profondeur de calcul pour l'entraînement : <input type="text" name="prof_entrainement" id="prof_entrainement" value="5" size="3"><br /><br />
 
       <input name="entierement_prof_train" id="entierement_prof_train" type="checkbox">
       Parcourir entièrement la profondeur pour l'ia du réseau neuronaux
@@ -101,7 +101,7 @@
       <div id="mode-info">Mode : Joueur vs IA entraînée (IA = Noirs)</div>
       <div id="scoreboard" class="scorestr">Score: Blancs: 0 | Noirs: 0</div>
       <br />
-      Tps par coup (ms) : <input type="text" size="5" id="tps_per_coup" value="1000"> - Profondeur : <input type="text" size="2" id="prof_max" value="0"> / Profondeur max : <input type="text" size="2" id="profondeur_max" value="15">
+      Tps par coup (ms) : <input type="text" size="5" id="tps_per_coup" value="1000"> - Profondeur : <input type="text" size="2" id="prof_max" value="0"> / Profondeur max : <input type="text" size="2" id="profondeur_max" value="13">
       <br /><input name="check_tps" id="check_tps" type="checkbox" checked="checked">
       Ignorer le temps (calculer jusqu'à la profondeur max)
       <br /><input name="entierement_prof" id="entierement_prof" type="checkbox">
@@ -1254,11 +1254,11 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 
             if (!is_entrainement) {
 
-              maxDepth = corriger_depth(parseInt(document.getElementById('profondeur_max').value, 10)-1);
+              maxDepth = corriger_depth(parseInt(document.getElementById('profondeur_max').value, 10));
             
             } else {
 
-              maxDepth = corriger_depth(parseInt(document.getElementById('prof_entrainement').value, 10)-1);
+              maxDepth = corriger_depth(parseInt(document.getElementById('prof_entrainement').value, 10));
             }
 
             let gameCopy = new Chess(game.fen());
