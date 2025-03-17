@@ -163,6 +163,8 @@
       var time_cumul = 0;
       var time_nb = 0;
 
+      var sauvegarder_depth = 6;
+
       var interrompre_partie_en_cours_entrainement = false;
 
       var tot_blanc = 0;
@@ -1057,6 +1059,18 @@ async function asyncMinimaxRootAlphaBetaTimed(depth, game, isMaximizingPlayer, u
   return bestMoves[Math.floor(Math.random() * bestMoves.length)];
 }
 
+function corriger_depth(depth) {
+
+  if ((depth === null) || (depth <= 0) || (typeof depth === 'string')) {
+
+    depth = sauvegarder_depth;
+  
+  } else {
+
+    sauvegarder_depth = depth;
+  }
+}
+
 // --- Recherche itérative en fonction du temps ---
 async function iterativeDeepeningTimed(game, maxDepth, useHybrid, timePerMove) {
   let bestMove = null;
@@ -1064,11 +1078,11 @@ async function iterativeDeepeningTimed(game, maxDepth, useHybrid, timePerMove) {
   const ignoreTime = document.getElementById('check_tps').checked;
   const endTime = ignoreTime ? Infinity : Date.now() + timePerMove;
   if (is_entrainement) {
-    maxDepth = parseInt(document.getElementById('prof_entrainement').value, 10);
+    maxDepth = corriger_depth(parseInt(document.getElementById('prof_entrainement').value, 10));
   }
   let debut_depth = is_entrainement ? maxDepth : 1;
   if (ignoreTime && !is_entrainement) {
-    maxDepth = parseInt(document.getElementById('profondeur_max').value, 10);
+    maxDepth = corriger_depth(parseInt(document.getElementById('profondeur_max').value, 10));
     debut_depth = maxDepth;
     console.log("maxDepth = " + maxDepth);
   }
@@ -1238,11 +1252,11 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 
             if (!is_entrainement) {
 
-              maxDepth = parseInt(document.getElementById('profondeur_max').value, 10)-1;
+              maxDepth = corriger_depth(parseInt(document.getElementById('profondeur_max').value, 10)-1);
             
             } else {
 
-              maxDepth = parseInt(document.getElementById('prof_entrainement').value, 10)-1;
+              maxDepth = corriger_depth(parseInt(document.getElementById('prof_entrainement').value, 10)-1);
             }
 
             let gameCopy = new Chess(game.fen());
