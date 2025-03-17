@@ -1061,7 +1061,7 @@ async function asyncMinimaxRootAlphaBetaTimed(depth, game, isMaximizingPlayer, u
 
 function corriger_depth(depth) {
 
-  if ((depth === null) || (depth <= 0) || (typeof depth === 'string')) {
+  if ((depth === null) || (depth <= 0) || (depth >= 20) || (typeof depth === 'string')) {
 
     depth = sauvegarder_depth;
   
