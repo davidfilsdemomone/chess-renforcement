@@ -53,6 +53,9 @@
       <input name="entierement_prof_train" id="entierement_prof_train" type="checkbox">
       Parcourir entièrement la profondeur pour l'ia du réseau neuronaux
       <br /><br />
+
+      <input name="afficher_log" id="afficher_log" type="checkbox">Afficher tous les logs dans la console (décocher la case accélère un peu le processus)<br /><br />
+      
       <input name="plus_rapide" id="plus_rapide" type="checkbox">
       Rendre moins facilement accessible cette page pendant les calculs (les parties seront jouées plus rapidement) 
 
@@ -1276,7 +1279,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 
             game = gameCopy;
             
-            if (!is_entrainement) {
+            if ((!is_entrainement) || (document.getElementById('afficher_log').checked))  {
 
               console.log("Liste des coups évalués par Stockfish :");
 
@@ -1306,11 +1309,11 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
               }
             }
 
-            if ((useHybrid) && (!((document.getElementById("entierement_prof_train").checked && is_entrainement) || (document.getElementById('entierement_prof').checked)))) {
+            if (useHybrid) {
               
               let moveEvaluations = [];
 
-              if (!is_entrainement) {
+              if ((!is_entrainement) || (document.getElementById('afficher_log').checked))  {
 
                 console.log("%cEvaluation de tous les coups hybrides par rapport aux coups stockfish normaux les meilleurs :" ,"color:green");
               }
@@ -1323,7 +1326,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 
                 let pts = evaluatePositionHybrid2(game, false, 0);
 
-                if (!is_entrainement) {
+                if ((!is_entrainement) || (document.getElementById('afficher_log').checked)) {
 
                   console.log("%c"+move + " - evaluation hybride : " + pts, "color:green"); 
                 }
@@ -1335,7 +1338,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
               bestValue = moveEvaluations[0].evaluation;
               bestMoves = moveEvaluations.filter(item => item.evaluation === bestValue)
                                          .map(item => item.move);
-              if (!is_entrainement) {
+              if ((!is_entrainement) || (document.getElementById('afficher_log').checked))  {
                 console.log("%cListe des " + bestMoves.length + " coups hybrides les meilleurs : ", "color:red");
                 bestMoves.forEach(item => {
                   console.log(`%cCoup: ${item} - évaluation hybride: ${bestValue}`, "color:red");
