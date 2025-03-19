@@ -107,9 +107,8 @@
       <br /><input name="entierement_prof" id="entierement_prof" type="checkbox">
       Parcourir entièrement la profondeur pour l'ia du réseau neuronaux
       <br /><input name="fct_eval" id="fct_eval" type="checkbox">
-      Fonction d'évaluation plus précise (réfléchi plus longtemps)
-      <br /><input name="break_en_moins" id="break_en_moins" type="checkbox">
-      Fonction alphabeta plus précise mais plus longue (on retire la coupure break)
+      Fonction d'évaluation stockfish précise à
+      <br />Précision : <input type="text" size="3" id="precision" name="precision" value="100"> pts (plus la précision est grande, plus l'ia de renforcement a le dessus sur l'ia stockfish)
       <br /><input type="checkbox" id="stockfish_move" checked="checked">
       Jouer coup Stockfish
       
@@ -889,13 +888,11 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
           }
         }
 
-        if (!document.getElementById('break_en_moins').checked) {
-          let flag = EXACT;
-          if (bestEval <= alpha) flag = UPPERBOUND;
-          else if (bestEval >= beta) flag = LOWERBOUND;
+        let flag = EXACT;
+        if (bestEval <= alpha) flag = UPPERBOUND;
+        else if (bestEval >= beta) flag = LOWERBOUND;
           transpositionTable.set(key, { value: bestEval, depth: depth, flag: flag });
           return bestEval;
-        }
       }
       
       alpha = Math.max(alpha, bestEval);
@@ -929,13 +926,12 @@ async function asyncMinimaxAlphaBetaTimed(node, depth, alpha, beta, isMaximizing
             killerMoves[ply].push(move);
           }
         }
-        if (!document.getElementById('break_en_moins').checked) {
-          let flag = EXACT;
-          if (bestEval <= alpha) flag = UPPERBOUND;
-          else if (bestEval >= beta) flag = LOWERBOUND;
+        
+        let flag = EXACT;
+        if (bestEval <= alpha) flag = UPPERBOUND;
+        else if (bestEval >= beta) flag = LOWERBOUND;
           transpositionTable.set(key, { value: bestEval, depth: depth, flag: flag });
-          return bestEval;
-       } 
+        return bestEval;
       }
       
       beta = Math.min(beta, bestEval);
@@ -1264,6 +1260,19 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
             let gameCopy = new Chess(game.fen());
 
             const result = await getBestMoveFromEvaluations(game, maxDepth);
+
+            const precision = parseInt(document.getElementById('precision').value, 10);
+
+             result.evaluations.forEach(evaluation => {
+              
+                if (Math.abs(evaluation.scoreValue) <= 95000) { 
+
+                  evaluation.scoreValue = Math.floor(evaluation.scoreValue / precision);
+                }
+
+                // on fait cette inéquation de 95000 car pour les mats on doit être précis à un point près pour les coups en avance ;)
+
+              });
 
             game = gameCopy;
             
