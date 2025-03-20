@@ -311,7 +311,9 @@
           const newModel = tf.sequential();
           newModel.add(tf.layers.dense({ inputShape: [inputSize], units: 128, activation: 'relu' }));
           newModel.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-          newModel.add(tf.layers.dense({ units: numMoves, activation: 'softmax' }));
+            // newModel.add(tf.layers.dense({ units: numMoves, activation: 'softmax' }));
+          newModel.add(tf.layers.dense({ units: numMoves, activation: 'tanh' }));
+
           newModel.compile({ optimizer: tf.train.adam(LEARNING_RATE), loss: 'categoricalCrossentropy' });
           let testTensor = tf.zeros([1, inputSize]);
           let testPrediction = newModel.predict(testTensor);
@@ -1128,67 +1130,63 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return score;
         }
 
-        function evaluatePositionHybrid(game, ignorer_mat_and_pat=false) {
-          return tf.tidy(() => {
-            const traditional = evaluatePosition(game, ignorer_mat_and_pat);
-            const stateTensor = boardToTensor(game);
-            const prediction = model.predict(stateTensor);
-            const maxProbTensor = prediction.max();
-            let maxProbArray = maxProbTensor.arraySync();
-            let maxProb;
-            if (Array.isArray(maxProbArray)) {
-              if (maxProbArray.length === 1 && typeof maxProbArray[0] === "number") {
-                maxProb = maxProbArray[0];
-              } else {
-                maxProb = Math.max(...maxProbArray.flat());
-              }
-            } else {
-              maxProb = maxProbArray;
-            }
-            if (!isFinite(maxProb)) {
-              console.warn("maxProb is not finite:", maxProb, ". Fallback to traditional evaluation.");
-              return traditional;
-            }
-            const bonusFactor = 100;
-            const hybrid = traditional + bonusFactor * maxProb;
-            if (!isFinite(hybrid)) {
-              console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
-              return traditional;
-            }
-            return hybrid;
-          });
-        }
+       function evaluatePositionHybrid(game, ignorer_mat_and_pat=false) {
+  return tf.tidy(() => {
+    const traditional = evaluatePosition(game, ignorer_mat_and_pat);
+    const stateTensor = boardToTensor(game);
+    const prediction = model.predict(stateTensor);
+    const maxProbTensor = prediction.max();
+    let maxProb = maxProbTensor.arraySync();
 
-        function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
-          return tf.tidy(() => {
-            const traditional = bestValue;
-            const stateTensor = boardToTensor(game);
-            const prediction = model.predict(stateTensor);
-            const maxProbTensor = prediction.max();
-            let maxProbArray = maxProbTensor.arraySync();
-            let maxProb;
-            if (Array.isArray(maxProbArray)) {
-              if (maxProbArray.length === 1 && typeof maxProbArray[0] === "number") {
-                maxProb = maxProbArray[0];
-              } else {
-                maxProb = Math.max(...maxProbArray.flat());
-              }
-            } else {
-              maxProb = maxProbArray;
-            }
-            if (!isFinite(maxProb)) {
-              console.warn("maxProb is not finite:", maxProb, ". Fallback to traditional evaluation.");
-              return traditional;
-            }
-            const bonusFactor = 100;
-            const hybrid = traditional + bonusFactor * maxProb;
-            if (!isFinite(hybrid)) {
-              console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
-              return traditional;
-            }
-            return hybrid;
-          });
-        }
+    if (!isFinite(maxProb)) {
+      console.warn("maxProb is not finite. Fallback to traditional evaluation.");
+      return traditional;
+    }
+
+    const bonusFactor = 100;
+    const hybridAdjustment = bonusFactor * (maxProb - 0.5);  // Centrage autour de zéro
+
+    // Réduction de l'impact si traditional est déjà extrême
+    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 500); // Plus traditional est élevé, moins on ajuste
+    const hybrid = traditional + hybridAdjustment * dynamicWeight;
+
+    if (!isFinite(hybrid)) {
+      console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
+      return traditional;
+    }
+
+    return hybrid;
+  });
+}
+
+function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
+  return tf.tidy(() => {
+    const traditional = bestValue; // Déjà calculé
+    const stateTensor = boardToTensor(game);
+    const prediction = model.predict(stateTensor);
+    const maxProbTensor = prediction.max();
+    let maxProb = maxProbTensor.arraySync();
+
+    if (!isFinite(maxProb)) {
+      console.warn("maxProb is not finite. Fallback to traditional evaluation.");
+      return traditional;
+    }
+
+    const bonusFactor = 100;
+    const hybridAdjustment = bonusFactor * (maxProb - 0.5);  
+
+    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 500); 
+    const hybrid = traditional + hybridAdjustment * dynamicWeight;
+
+    if (!isFinite(hybrid)) {
+      console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
+      return traditional;
+    }
+
+    return hybrid;
+  });
+}
+
 
         async function chooseMoveWhite(game, color_piece) {
 
@@ -1334,7 +1332,26 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
                 customUndo(game);
                 moveEvaluations.push({ move: move, evaluation: pts });
               }
-              moveEvaluations.sort((a, b) => b.evaluation - a.evaluation);
+
+              if (game.turn() == "b") {
+
+                  moveEvaluations.sort((a, b) => a.evaluation - b.evaluation);
+
+                  if ((!is_entrainement) || (document.getElementById('afficher_log').checked)) {
+
+                    console.log("On trie par ordre décroissant les coups normaux dans coups hybrides car on est les noirs...");
+                  }
+              
+              } else {
+
+                  moveEvaluations.sort((a, b) => b.evaluation - a.evaluation);
+
+                  if ((!is_entrainement) || (document.getElementById('afficher_log').checked)) {
+
+                    console.log("On trie par ordre croissant les coups normaux dans coups hybrides car on est les blancs...");
+                  }
+              }
+
               bestValue = moveEvaluations[0].evaluation;
               bestMoves = moveEvaluations.filter(item => item.evaluation === bestValue)
                                          .map(item => item.move);
