@@ -1333,7 +1333,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
                 moveEvaluations.push({ move: move, evaluation: pts });
               }
 
-              if (game.turn() == "b") {
+              if (game.turn() === "b") {
 
                   moveEvaluations.sort((a, b) => a.evaluation - b.evaluation);
 
