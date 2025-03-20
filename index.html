@@ -311,11 +311,8 @@
           
           const newModel = tf.sequential();
 
-          const weightInitializer = tf.initializers.varianceScaling({
-            scale: 1.0, mode: 'fanAvg', distribution: 'normal'
-          });
-
-          const biasInitializer = tf.initializers.zeros(); // On peut tester sans biais
+          const weightInitializer = tf.initializers.randomUniform({ minValue: -0.3, maxValue: 0.3 });
+          const biasInitializer = tf.initializers.randomUniform({ minValue: -0.15, maxValue: 0.15 });
 
           newModel.add(tf.layers.dense({ 
             inputShape: [inputSize], 
@@ -334,7 +331,7 @@
 
           newModel.add(tf.layers.dense({ 
             units: numMoves, 
-            activation: 'softsign',  // Permet d'avoir une sortie plus étalée
+            activation: 'linear',
             kernelInitializer: weightInitializer,
             biasInitializer: biasInitializer
           }));
@@ -1478,7 +1475,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           const batch = sampleBatch(replayBuffer, BATCH_SIZE);
           const states = batch.map(item => item.state);
           const actions = batch.map(item => item.action);
-          const rewards = batch.map(item => item.result * (item.color === 'w' ? 1 : -1) * REWARD_SCALE);
+          const rewards = batch.map(item => item.result * 1 * REWARD_SCALE);
           const statesTensor = tf.concat(states);
           const actionsTensor = tf.tensor1d(actions, 'int32');
           const rewardsTensor = tf.tensor1d(rewards);
