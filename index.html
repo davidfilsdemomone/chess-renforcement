@@ -1151,63 +1151,74 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return score;
         }
 
-      function evaluatePositionHybrid(game, ignorer_mat_and_pat=false) {
+   function evaluatePositionHybrid(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
-    const traditional = evaluatePosition(game, ignorer_mat_and_pat);
+    const traditional = 0; // ✅ Toujours 0 pour tester l'effet du réseau
     const stateTensor = boardToTensor(game);
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
     if (!isFinite(maxProb)) {
-      console.warn("maxProb is not finite. Fallback to traditional evaluation.");
+      console.warn("⚠️ maxProb Hybrid is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
-    //console.log("MaxProb Hybrid:", maxProb);  
+    // ✅ Nouvelle normalisation plus équilibrée
+    const centeredMaxProb = (maxProb - 0.35) * 3; 
 
-    // ✅ Correction : Utilisation de `tf.tanh()`
-    const scaleFactor = 10;  
-    const bonusFactor = 30;  
-    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * maxProb)).arraySync() - 0.45;
+    //console.log("🔍 MaxProb Brut Hybrid:", maxProb);
+    //console.log("📏 Centered MaxProb Hybrid:", centeredMaxProb);
 
-    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
-    const hybrid = traditional + hybridAdjustment * dynamicWeight;
+    // ✅ Limite l'effet de `tanh()` pour éviter les évaluations extrêmes
+    const scaleFactor = 1.0;
+    const bonusFactor = 1.0;
+    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * centeredMaxProb)).arraySync();
+
+    //console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
+
+    const hybrid = traditional + hybridAdjustment;
 
     if (!isFinite(hybrid)) {
-      console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
+      console.warn("⚠️ Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
     return hybrid;
   });
 }
+
 
 function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
-    const traditional = bestValue;
+    const traditional = 0; // ✅ Toujours 0 pour voir l'effet du réseau
     const stateTensor = boardToTensor(game);
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
     if (!isFinite(maxProb)) {
-      console.warn("maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
+      console.warn("⚠️ maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
-    //console.log("MaxProb Hybrid2:", maxProb);
+    // ✅ Nouvelle normalisation moins agressive
+    const centeredMaxProb = (maxProb - 0.35) * 3;
 
-    // ✅ Correction : Utilisation de `tf.tanh()`
-    const scaleFactor = 10;  
-    const bonusFactor = 30;  
-    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * maxProb)).arraySync() - 0.45;
+    //console.log("🔍 MaxProb Brut Hybrid2:", maxProb);
+    //console.log("📏 Centered MaxProb Hybrid2:", centeredMaxProb);
 
-    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
-    const hybrid = traditional + hybridAdjustment * dynamicWeight;
+    // ✅ Réduction de l'amplification
+    const scaleFactor = 1.0;
+    const bonusFactor = 1.0;
+    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * centeredMaxProb)).arraySync();
+
+    //console.log("⚖️ Hybrid2 Adjustment:", hybridAdjustment);
+
+    const hybrid = traditional + hybridAdjustment;
 
     if (!isFinite(hybrid)) {
-      console.warn("Hybrid2 evaluation computed is not finite. Fallback to traditional evaluation.");
+      console.warn("⚠️ Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
@@ -1216,7 +1227,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 }
 
 
-        async function chooseMoveWhite(game, color_piece) {
+      async function chooseMoveWhite(game, color_piece) {
 
           if (document.getElementById("stockfish_move") && document.getElementById("stockfish_move").checked) {
 
