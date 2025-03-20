@@ -88,14 +88,14 @@
 
       Nombre de parties totales déjà jouées par l'IA : <input type="text" size="5" id="nb_parties_totales_IA" value="0" readonly><br />
 
-      <button id="reset-training" style="display:none;">Remettre à zéro tout le réseau neuronaux</button>
+      <button id="reset-training">Remettre à zéro tout le réseau neuronaux</button>
       <div id="training-status">Statut : en attente</div>
       <div id="progress-container">
         <progress id="progressBar" value="0" max="100"></progress>
       </div>
 
       <!-- Bouton pour jouer directement si le modèle existe déjà -->
-      <button id="start-play" style="display:none;">Interrompre l'entraînement / Commencer une partie</button>
+      <button id="start-play">Interrompre l'entraînement / Commencer une partie</button>
       <!-- Bouton pour supprimer l'entraînement enregistré -->
 
     </div>
@@ -112,9 +112,11 @@
       Parcourir entièrement la profondeur pour l'ia du réseau neuronaux
       <br /><input name="fct_eval" id="fct_eval" type="checkbox">
       Fonction d'évaluation stockfish précise à
-      <br />Précision : <input type="text" size="3" id="precision" name="precision" value="100"> pts (plus la précision est grande, plus l'ia de renforcement a le dessus sur l'ia stockfish)
+      <br />Précision : <input type="text" size="7" id="precision" name="precision" value="100"> pts (plus la précision est grande, plus l'ia de renforcement a le dessus sur l'ia stockfish)
       <br /><input type="checkbox" id="stockfish_move" checked="checked">
       Jouer coup Stockfish
+      <br /><input type="checkbox" id="pas_voir_mat">
+      Pas voir les mats par pts normaux pour l'ia de renforcement
       
     <div style="display: flex; justify-content: center;">
     <div id="value_chessboard">Valeur de l'échiquier : 0 pts</div>
@@ -151,7 +153,7 @@
       // Paramètres pour la stabilité
       const LEARNING_RATE = 0.0001;
       const optimizer = tf.train.adam(LEARNING_RATE);
-      const BATCH_SIZE = 4;
+      const BATCH_SIZE = 3;
       const REWARD_SCALE = 1;
 
       // Pour la détection de match nul par nombre total de demi-coups
@@ -311,9 +313,11 @@
           
           const newModel = tf.sequential();
 
-          const weightInitializer = tf.initializers.randomUniform({ minValue: -0.3, maxValue: 0.3 });
-          const biasInitializer = tf.initializers.randomUniform({ minValue: -0.15, maxValue: 0.15 });
+          // ✅ Initialisation plus stable (évite explosion des valeurs)
+          const weightInitializer = tf.initializers.heUniform();
+          const biasInitializer = tf.initializers.zeros();
 
+          // ✅ Première couche : `tanh` pour garder les valeurs entre -1 et 1
           newModel.add(tf.layers.dense({ 
             inputShape: [inputSize], 
             units: 128, 
@@ -329,18 +333,33 @@
             biasInitializer: biasInitializer
           }));
 
+          // ✅ Dernière couche : `tanh` pour **forcer la sortie entre -1 et 1**
           newModel.add(tf.layers.dense({ 
             units: numMoves, 
-            activation: 'linear',
+            activation: 'tanh',  // ✅ La sortie sera entre -1 et 1
             kernelInitializer: weightInitializer,
             biasInitializer: biasInitializer
           }));
 
-          newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanAbsoluteError' });
+          // ✅ Compilation du modèle (Adam pour la stabilité)
+          newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
 
-          let testTensor = tf.zeros([1, inputSize]);
+          // ✅ Vérification de la stabilité avec une entrée normalisée
+          let testTensor = tf.randomUniform([1, inputSize], -1, 1); // ✅ Entrée entre -1 et 1
           let testPrediction = newModel.predict(testTensor);
-          console.log("Test Prediction (nouveau modèle) :", testPrediction.arraySync());
+
+          // ✅ Vérification des valeurs infinies
+          let maxPred = testPrediction.max().arraySync();
+          let minPred = testPrediction.min().arraySync();
+
+          console.log(`Test Prediction max: ${maxPred}, min: ${minPred}`);
+
+          if (!isFinite(maxPred) || !isFinite(minPred) || isNaN(maxPred) || isNaN(minPred)) {
+            console.warn("⚠️ Attention : Le modèle a généré une valeur infinie ou NaN !");
+          }
+
+          // ✅ Forcer une normalisation des sorties si nécessaire
+          testPrediction = testPrediction.div(testPrediction.abs().max().add(1e-7)); // Évite l'explosion
 
           return newModel;
 
@@ -420,17 +439,7 @@
 
         // Charger ou créer le modèle
         model = await getOrCreateModel();
-        try {
-          await tf.loadLayersModel('localstorage://chess-model');
-          document.getElementById('start-play').style.display = "inline-block";
-          document.getElementById('reset-training').style.display = "inline-block";
-          let testTensor = tf.zeros([1, 64]);
-          let testPrediction = model.predict(testTensor);
-          console.log("Après chargement, Test Prediction :", testPrediction.arraySync());
-        } catch (e) {
-          // Aucun modèle existant, seuls le bouton d'entraînement sera affiché
-        }
-
+      
         // Variables globales
         let aiTimeoutId = null;
         let whiteScore = 0;
@@ -1155,11 +1164,33 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return score;
         }
 
-   function evaluatePositionHybrid(game, ignorer_mat_and_pat=false, bestValue) {
+  function evaluatePositionHybrid(game, ignorer_mat_and_pat = false, bestValue) {
   return tf.tidy(() => {
     const traditional = 0; // ✅ Toujours 0 pour tester l'effet du réseau
-    const stateTensor = boardToTensor(game);
-    const prediction = model.predict(stateTensor);
+    const stateTensor = boardToTensor(game).toFloat(); // ✅ Conversion immédiate
+
+    // Calcul de la moyenne et de l'écart-type
+    const mean = stateTensor.mean();
+    const variance = stateTensor.sub(mean).square().mean();
+    const std = variance.sqrt();
+
+    const meanVal = mean.arraySync();
+    const stdVal = std.arraySync();
+
+    console.log(`🔍 mean=${meanVal}, std=${stdVal}`);
+
+    // Vérification des valeurs anormales
+    if (!isFinite(meanVal) || !isFinite(stdVal) || stdVal < 1e-5) {
+      console.warn("⚠️ Entrée du modèle non valide ! Annulation du calcul.");
+      return 0;
+    }
+
+    // 🔹 **Correction : s'assurer que std est un tenseur avant la division**
+    const stdTensor = tf.scalar(stdVal + 1e-5); // ✅ Convertir stdVal en tenseur
+    const normalizedState = stateTensor.sub(mean).div(stdTensor);
+
+    // Prédiction du modèle
+    const prediction = model.predict(normalizedState);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
@@ -1168,18 +1199,16 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
       return traditional;
     }
 
-    // ✅ Nouvelle normalisation plus équilibrée
-    const centeredMaxProb = maxProb; 
+    // ✅ Forcer maxProb dans l'intervalle [-1, 1]
+    maxProb = Math.max(-1, Math.min(1, maxProb));
 
-    //console.log("🔍 MaxProb Brut Hybrid:", maxProb);
-    //console.log("📏 Centered MaxProb Hybrid:", centeredMaxProb);
+    console.log("🚀 Hybrid MaxProb Prediction :", maxProb);
 
-    // ✅ Limite l'effet de `tanh()` pour éviter les évaluations extrêmes
+    // ✅ Réduction de l'amplification
     const scaleFactor = 1.0;
-    const bonusFactor = 1.0;
-    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
+    const hybridAdjustment = scaleFactor * maxProb; 
 
-    //console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
+    console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
 
     const hybrid = traditional + hybridAdjustment;
 
@@ -1193,32 +1222,54 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 }
 
 
-function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
+function evaluatePositionHybrid2(game, ignorer_mat_and_pat = false, bestValue) {
   return tf.tidy(() => {
     const traditional = 0; // ✅ Toujours 0 pour voir l'effet du réseau
-    const stateTensor = boardToTensor(game);
+    const stateTensor = boardToTensor(game).toFloat(); // ✅ Conversion immédiate
+    
+    // Première prédiction brute
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
-    if (!isFinite(maxProb)) {
-      console.warn("⚠️ maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
-      return traditional;
+    // Calcul de la moyenne et de l'écart-type
+    const mean = stateTensor.mean();
+    const variance = stateTensor.sub(mean).square().mean();
+    const std = variance.sqrt();
+
+    const meanVal = mean.arraySync();
+    const stdVal = std.arraySync();
+
+    console.log(`🔍 mean=${meanVal}, std=${stdVal}`);
+
+    // Vérification des valeurs anormales
+    if (!isFinite(meanVal) || !isFinite(stdVal) || stdVal < 1e-5) {
+      console.warn("⚠️ Entrée du modèle non valide ! Annulation du calcul.");
+      return 0;
     }
 
-    // ✅ Nouvelle normalisation moins agressive
-    const centeredMaxProb = maxProb;
+    // ✅ Correction : Convertir `std` en tenseur avant la division
+    const stdTensor = tf.scalar(stdVal + 1e-5); // Assurer un tenseur valide
+    const normalizedState = stateTensor.sub(mean).div(stdTensor);
 
-    //console.log("🔍 MaxProb Brut Hybrid2:", maxProb);
-    //console.log("📏 Centered MaxProb Hybrid2:", centeredMaxProb);
+    // Deuxième prédiction avec l'état normalisé
+    const prediction2 = model.predict(normalizedState);
+    const maxProbTensor2 = prediction2.max();
+    let maxProb2 = maxProbTensor2.arraySync();
+
+    if (!isFinite(maxProb2)) {
+      console.warn("⚠️ maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
+      return 0;
+    }
+
+    // ✅ Sécurisation de `maxProb2` pour éviter les valeurs infinies
+    maxProb2 = Math.max(-1, Math.min(1, maxProb2)); 
+
+    console.log("🚀 Hybrid2 MaxProb Prediction :", maxProb2);
 
     // ✅ Réduction de l'amplification
     const scaleFactor = 1.0;
-    const bonusFactor = 1.0;
-    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
-
-
-    //console.log("⚖️ Hybrid2 Adjustment:", hybridAdjustment);
+    const hybridAdjustment = scaleFactor * maxProb2;  
 
     const hybrid = traditional + hybridAdjustment;
 
@@ -1230,6 +1281,8 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
     return hybrid;
   });
 }
+
+
 
 
       async function chooseMoveWhite(game, color_piece) {
@@ -1310,9 +1363,9 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
              result.evaluations.forEach(evaluation => {
               
-                if (Math.abs(evaluation.scoreValue) <= 95000) { 
+                if ((Math.abs(evaluation.scoreValue) <= 95000) || (document.getElementById('pas_voir_mat').checked)) { 
 
-                  evaluation.scoreValue = Math.floor(evaluation.scoreValue / precision);
+                  evaluation.scoreValue = Math.round(evaluation.scoreValue / precision);
                 }
 
                 // on fait cette inéquation de 95000 car pour les mats on doit être précis à un point près pour les coups en avance ;)
@@ -1545,7 +1598,10 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             if (movesCount > 0) {
               const bonusFactor = 1 + (10 / movesCount);
               result *= bonusFactor;
-              console.log("Mat bonus appliqué :", bonusFactor);
+
+              result = Math.max(-1, Math.min(1, result)); // Forcer entre -1 et 1
+
+              console.log("Result avec Mat bonus appliqué normalisé entre -1 et 1 : " + result);
             }
 
           } else {
@@ -1626,12 +1682,15 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             if (movesCount > 0) {
               const bonusFactor = 1 + (10 / movesCount);
               result *= bonusFactor;
-              console.log("Mat bonus appliqué :", bonusFactor);
+
+              result = Math.max(-1, Math.min(1, result)); // Forcer entre -1 et 1
+
+              console.log("Result avec Mat bonus appliqué normalisé entre -1 et 1 :", result);
             }
             replayBuffer.forEach(record => record.result = result);
             console.log("Historique des coups retenus pour l'entraînement :");
             replayBuffer.forEach((item, index) => {
-              let result_bon = (index % 2 === 1) ? result : -result;
+              let result_bon = result;
               console.log("Coup " + (index + 1) + ": " + indexToMove[item.action] + " bonus = " + result_bon);
             });
 
