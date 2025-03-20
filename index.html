@@ -10,7 +10,8 @@
     <!-- Chargement de Chess.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <!-- Chargement de TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.0.0"></script>
+
     <!-- Chargement de Chessboard.js via votre lien personnalisé -->
     <script src="https://qualitesite.com/popular_chess_deep/js/chessboard.js"></script>
     <style>
@@ -310,11 +311,11 @@
           
           const newModel = tf.sequential();
 
-          // Initialisation des poids avec des valeurs entre -0.1 et 0.1
-          const weightInitializer = tf.initializers.randomUniform({ minValue: -0.1, maxValue: 0.1 });
+          const weightInitializer = tf.initializers.varianceScaling({
+            scale: 1.0, mode: 'fanAvg', distribution: 'normal'
+          });
 
-          // Initialisation des biais avec une distribution équilibrée autour de zéro
-          const biasInitializer = tf.initializers.randomUniform({ minValue: -0.05, maxValue: 0.05 });
+          const biasInitializer = tf.initializers.zeros(); // On peut tester sans biais
 
           newModel.add(tf.layers.dense({ 
             inputShape: [inputSize], 
@@ -333,12 +334,12 @@
 
           newModel.add(tf.layers.dense({ 
             units: numMoves, 
-            activation: 'linear',  // Permet d'éviter l'écrasement des valeurs entre -1 et 1
+            activation: 'softsign',  // Permet d'avoir une sortie plus étalée
             kernelInitializer: weightInitializer,
             biasInitializer: biasInitializer
           }));
 
-          newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
+          newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanAbsoluteError' });
 
           let testTensor = tf.zeros([1, inputSize]);
           let testPrediction = newModel.predict(testTensor);
@@ -1179,7 +1180,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
     // ✅ Limite l'effet de `tanh()` pour éviter les évaluations extrêmes
     const scaleFactor = 1.0;
     const bonusFactor = 1.0;
-    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * centeredMaxProb)).arraySync();
+    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
 
     //console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
 
@@ -1217,7 +1218,8 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
     // ✅ Réduction de l'amplification
     const scaleFactor = 1.0;
     const bonusFactor = 1.0;
-    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * centeredMaxProb)).arraySync();
+    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
+
 
     //console.log("⚖️ Hybrid2 Adjustment:", hybridAdjustment);
 
