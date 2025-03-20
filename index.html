@@ -307,18 +307,39 @@
           return loadedModel;
 
         } catch (e) {
-          console.log("Aucun modèle sauvegardé, création d'un nouveau modèle.");
           const newModel = tf.sequential();
-          newModel.add(tf.layers.dense({ inputShape: [inputSize], units: 128, activation: 'relu' }));
-          newModel.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-            // newModel.add(tf.layers.dense({ units: numMoves, activation: 'softmax' }));
-          newModel.add(tf.layers.dense({ units: numMoves, activation: 'tanh' }));
 
-          newModel.compile({ optimizer: tf.train.adam(LEARNING_RATE), loss: 'categoricalCrossentropy' });
+          newModel.add(tf.layers.dense({ 
+            inputShape: [inputSize], 
+            units: 128, 
+            activation: 'tanh', 
+            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), // ✅ Correction ici
+            biasInitializer: tf.initializers.zeros()
+          }));
+
+          newModel.add(tf.layers.dense({ 
+            units: 64, 
+            activation: 'tanh', 
+            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), 
+            biasInitializer: tf.initializers.zeros()
+          }));
+
+          newModel.add(tf.layers.dense({ 
+            units: numMoves, 
+            activation: 'tanh', 
+            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), 
+            biasInitializer: tf.initializers.zeros()
+          }));
+
+          newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
+
           let testTensor = tf.zeros([1, inputSize]);
           let testPrediction = newModel.predict(testTensor);
           console.log("Test Prediction (nouveau modèle) :", testPrediction.arraySync());
+
           return newModel;
+
+
         }
       }
 
@@ -1130,7 +1151,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return score;
         }
 
-       function evaluatePositionHybrid(game, ignorer_mat_and_pat=false) {
+      function evaluatePositionHybrid(game, ignorer_mat_and_pat=false) {
   return tf.tidy(() => {
     const traditional = evaluatePosition(game, ignorer_mat_and_pat);
     const stateTensor = boardToTensor(game);
@@ -1143,11 +1164,12 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
       return traditional;
     }
 
-    const bonusFactor = 100;
-    const hybridAdjustment = bonusFactor * (maxProb - 0.5);  // Centrage autour de zéro
+    const scaleFactor = 10;  
+    const bonusFactor = 30;  
+    const hybridAdjustment = bonusFactor * (tanh(scaleFactor * maxProb) - 0.45); 
 
-    // Réduction de l'impact si traditional est déjà extrême
-    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 500); // Plus traditional est élevé, moins on ajuste
+    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
+
     const hybrid = traditional + hybridAdjustment * dynamicWeight;
 
     if (!isFinite(hybrid)) {
@@ -1159,33 +1181,41 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
   });
 }
 
+
+
 function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
-    const traditional = bestValue; // Déjà calculé
+    const traditional = bestValue; // Utilisation de la valeur traditionnelle fournie
     const stateTensor = boardToTensor(game);
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
     if (!isFinite(maxProb)) {
-      console.warn("maxProb is not finite. Fallback to traditional evaluation.");
+      console.warn("maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
-    const bonusFactor = 100;
-    const hybridAdjustment = bonusFactor * (maxProb - 0.5);  
+    console.log("MaxProb Hybrid2:", maxProb);  
 
-    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 500); 
+    const scaleFactor = 10;  
+    const bonusFactor = 30;  
+    const hybridAdjustment = bonusFactor * (tanh(scaleFactor * maxProb) - 0.45); 
+
+    const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
+
     const hybrid = traditional + hybridAdjustment * dynamicWeight;
 
     if (!isFinite(hybrid)) {
-      console.warn("Hybrid evaluation computed is not finite. Fallback to traditional evaluation.");
+      console.warn("Hybrid2 evaluation computed is not finite. Fallback to traditional evaluation.");
       return traditional;
     }
 
     return hybrid;
   });
 }
+
+
 
 
         async function chooseMoveWhite(game, color_piece) {
