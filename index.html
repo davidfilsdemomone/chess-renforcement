@@ -307,28 +307,35 @@
           return loadedModel;
 
         } catch (e) {
+          
           const newModel = tf.sequential();
+
+          // Initialisation des poids avec des valeurs entre -0.1 et 0.1
+          const weightInitializer = tf.initializers.randomUniform({ minValue: -0.1, maxValue: 0.1 });
+
+          // Initialisation des biais avec une distribution équilibrée autour de zéro
+          const biasInitializer = tf.initializers.randomUniform({ minValue: -0.05, maxValue: 0.05 });
 
           newModel.add(tf.layers.dense({ 
             inputShape: [inputSize], 
             units: 128, 
             activation: 'tanh', 
-            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), // ✅ Correction ici
-            biasInitializer: tf.initializers.zeros()
+            kernelInitializer: weightInitializer,
+            biasInitializer: biasInitializer
           }));
 
           newModel.add(tf.layers.dense({ 
             units: 64, 
             activation: 'tanh', 
-            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), 
-            biasInitializer: tf.initializers.zeros()
+            kernelInitializer: weightInitializer,
+            biasInitializer: biasInitializer
           }));
 
           newModel.add(tf.layers.dense({ 
             units: numMoves, 
-            activation: 'tanh', 
-            kernelInitializer: tf.initializers.varianceScaling({ scale: 1.0, mode: 'fanAvg', distribution: 'normal' }), 
-            biasInitializer: tf.initializers.zeros()
+            activation: 'linear',  // Permet d'éviter l'écrasement des valeurs entre -1 et 1
+            kernelInitializer: weightInitializer,
+            biasInitializer: biasInitializer
           }));
 
           newModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
@@ -339,9 +346,8 @@
 
           return newModel;
 
-
-        }
       }
+    }
 
       // Wrappers pour mettre à jour le compteur de coups dans game
       function customMove(game, move, notation=false) {
@@ -1165,7 +1171,7 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
     }
 
     // ✅ Nouvelle normalisation plus équilibrée
-    const centeredMaxProb = (maxProb - 0.35) * 3; 
+    const centeredMaxProb = maxProb; 
 
     //console.log("🔍 MaxProb Brut Hybrid:", maxProb);
     //console.log("📏 Centered MaxProb Hybrid:", centeredMaxProb);
@@ -1203,7 +1209,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
     }
 
     // ✅ Nouvelle normalisation moins agressive
-    const centeredMaxProb = (maxProb - 0.35) * 3;
+    const centeredMaxProb = maxProb;
 
     //console.log("🔍 MaxProb Brut Hybrid2:", maxProb);
     //console.log("📏 Centered MaxProb Hybrid2:", centeredMaxProb);
