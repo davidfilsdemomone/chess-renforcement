@@ -1164,12 +1164,14 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
       return traditional;
     }
 
+    //console.log("MaxProb Hybrid:", maxProb);  
+
+    // ✅ Correction : Utilisation de `tf.tanh()`
     const scaleFactor = 10;  
     const bonusFactor = 30;  
-    const hybridAdjustment = bonusFactor * (tanh(scaleFactor * maxProb) - 0.45); 
+    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * maxProb)).arraySync() - 0.45;
 
     const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
-
     const hybrid = traditional + hybridAdjustment * dynamicWeight;
 
     if (!isFinite(hybrid)) {
@@ -1181,11 +1183,9 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
   });
 }
 
-
-
 function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
-    const traditional = bestValue; // Utilisation de la valeur traditionnelle fournie
+    const traditional = bestValue;
     const stateTensor = boardToTensor(game);
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
@@ -1196,14 +1196,14 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
       return traditional;
     }
 
-    console.log("MaxProb Hybrid2:", maxProb);  
+    //console.log("MaxProb Hybrid2:", maxProb);
 
+    // ✅ Correction : Utilisation de `tf.tanh()`
     const scaleFactor = 10;  
     const bonusFactor = 30;  
-    const hybridAdjustment = bonusFactor * (tanh(scaleFactor * maxProb) - 0.45); 
+    const hybridAdjustment = bonusFactor * tf.tanh(tf.scalar(scaleFactor * maxProb)).arraySync() - 0.45;
 
     const dynamicWeight = 1 / (1 + Math.abs(traditional) / 1000);
-
     const hybrid = traditional + hybridAdjustment * dynamicWeight;
 
     if (!isFinite(hybrid)) {
@@ -1214,8 +1214,6 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
     return hybrid;
   });
 }
-
-
 
 
         async function chooseMoveWhite(game, color_piece) {
