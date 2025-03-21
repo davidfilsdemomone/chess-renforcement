@@ -153,7 +153,7 @@
       // Paramètres pour la stabilité
       const LEARNING_RATE = 0.0001;
       const optimizer = tf.train.adam(LEARNING_RATE);
-      const BATCH_SIZE = 3;
+      const BATCH_SIZE = 4;
       const REWARD_SCALE = 1;
 
       // Pour la détection de match nul par nombre total de demi-coups
@@ -362,8 +362,7 @@
           testPrediction = testPrediction.div(testPrediction.abs().max().add(1e-7)); // Évite l'explosion
 
           return newModel;
-
-      }
+        }
     }
 
       // Wrappers pour mettre à jour le compteur de coups dans game
@@ -439,7 +438,17 @@
 
         // Charger ou créer le modèle
         model = await getOrCreateModel();
-      
+        try {
+          await tf.loadLayersModel('localstorage://chess-model');
+          document.getElementById('start-play').style.display = "inline-block";
+          document.getElementById('reset-training').style.display = "inline-block";
+          let testTensor = tf.zeros([1, 64]);
+          let testPrediction = model.predict(testTensor);
+          console.log("Après chargement, Test Prediction :", testPrediction.arraySync());
+        } catch (e) {
+          // Aucun modèle existant, seuls le bouton d'entraînement sera affiché
+        }
+
         // Variables globales
         let aiTimeoutId = null;
         let whiteScore = 0;
@@ -1164,33 +1173,11 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
           return score;
         }
 
-  function evaluatePositionHybrid(game, ignorer_mat_and_pat = false, bestValue) {
+   function evaluatePositionHybrid(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
     const traditional = 0; // ✅ Toujours 0 pour tester l'effet du réseau
-    const stateTensor = boardToTensor(game).toFloat(); // ✅ Conversion immédiate
-
-    // Calcul de la moyenne et de l'écart-type
-    const mean = stateTensor.mean();
-    const variance = stateTensor.sub(mean).square().mean();
-    const std = variance.sqrt();
-
-    const meanVal = mean.arraySync();
-    const stdVal = std.arraySync();
-
-    console.log(`🔍 mean=${meanVal}, std=${stdVal}`);
-
-    // Vérification des valeurs anormales
-    if (!isFinite(meanVal) || !isFinite(stdVal) || stdVal < 1e-5) {
-      console.warn("⚠️ Entrée du modèle non valide ! Annulation du calcul.");
-      return 0;
-    }
-
-    // 🔹 **Correction : s'assurer que std est un tenseur avant la division**
-    const stdTensor = tf.scalar(stdVal + 1e-5); // ✅ Convertir stdVal en tenseur
-    const normalizedState = stateTensor.sub(mean).div(stdTensor);
-
-    // Prédiction du modèle
-    const prediction = model.predict(normalizedState);
+    const stateTensor = boardToTensor(game);
+    const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
@@ -1199,16 +1186,18 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
       return traditional;
     }
 
-    // ✅ Forcer maxProb dans l'intervalle [-1, 1]
-    maxProb = Math.max(-1, Math.min(1, maxProb));
+    // ✅ Nouvelle normalisation plus équilibrée
+    const centeredMaxProb = maxProb; 
 
-    console.log("🚀 Hybrid MaxProb Prediction :", maxProb);
+    //console.log("🔍 MaxProb Brut Hybrid:", maxProb);
+    //console.log("📏 Centered MaxProb Hybrid:", centeredMaxProb);
 
-    // ✅ Réduction de l'amplification
+    // ✅ Limite l'effet de `tanh()` pour éviter les évaluations extrêmes
     const scaleFactor = 1.0;
-    const hybridAdjustment = scaleFactor * maxProb; 
+    const bonusFactor = 1.0;
+    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
 
-    console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
+    //console.log("⚖️ Hybrid Adjustment:", hybridAdjustment);
 
     const hybrid = traditional + hybridAdjustment;
 
@@ -1222,54 +1211,32 @@ async function jouerCoupAvecDelaiTimed(game, maxDepth, useHybrid, timePerMove) {
 }
 
 
-function evaluatePositionHybrid2(game, ignorer_mat_and_pat = false, bestValue) {
+function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
   return tf.tidy(() => {
     const traditional = 0; // ✅ Toujours 0 pour voir l'effet du réseau
-    const stateTensor = boardToTensor(game).toFloat(); // ✅ Conversion immédiate
-    
-    // Première prédiction brute
+    const stateTensor = boardToTensor(game);
     const prediction = model.predict(stateTensor);
     const maxProbTensor = prediction.max();
     let maxProb = maxProbTensor.arraySync();
 
-    // Calcul de la moyenne et de l'écart-type
-    const mean = stateTensor.mean();
-    const variance = stateTensor.sub(mean).square().mean();
-    const std = variance.sqrt();
-
-    const meanVal = mean.arraySync();
-    const stdVal = std.arraySync();
-
-    console.log(`🔍 mean=${meanVal}, std=${stdVal}`);
-
-    // Vérification des valeurs anormales
-    if (!isFinite(meanVal) || !isFinite(stdVal) || stdVal < 1e-5) {
-      console.warn("⚠️ Entrée du modèle non valide ! Annulation du calcul.");
-      return 0;
-    }
-
-    // ✅ Correction : Convertir `std` en tenseur avant la division
-    const stdTensor = tf.scalar(stdVal + 1e-5); // Assurer un tenseur valide
-    const normalizedState = stateTensor.sub(mean).div(stdTensor);
-
-    // Deuxième prédiction avec l'état normalisé
-    const prediction2 = model.predict(normalizedState);
-    const maxProbTensor2 = prediction2.max();
-    let maxProb2 = maxProbTensor2.arraySync();
-
-    if (!isFinite(maxProb2)) {
+    if (!isFinite(maxProb)) {
       console.warn("⚠️ maxProb Hybrid2 is not finite. Fallback to traditional evaluation.");
-      return 0;
+      return traditional;
     }
 
-    // ✅ Sécurisation de `maxProb2` pour éviter les valeurs infinies
-    maxProb2 = Math.max(-1, Math.min(1, maxProb2)); 
+    // ✅ Nouvelle normalisation moins agressive
+    const centeredMaxProb = maxProb;
 
-    console.log("🚀 Hybrid2 MaxProb Prediction :", maxProb2);
+    //console.log("🔍 MaxProb Brut Hybrid2:", maxProb);
+    //console.log("📏 Centered MaxProb Hybrid2:", centeredMaxProb);
 
     // ✅ Réduction de l'amplification
     const scaleFactor = 1.0;
-    const hybridAdjustment = scaleFactor * maxProb2;  
+    const bonusFactor = 1.0;
+    const hybridAdjustment = scaleFactor * centeredMaxProb;  // Suppression de tanh() pour éviter l'effet d'écrasement
+
+
+    //console.log("⚖️ Hybrid2 Adjustment:", hybridAdjustment);
 
     const hybrid = traditional + hybridAdjustment;
 
@@ -1281,8 +1248,6 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat = false, bestValue) {
     return hybrid;
   });
 }
-
-
 
 
       async function chooseMoveWhite(game, color_piece) {
@@ -1598,10 +1563,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat = false, bestValue) {
             if (movesCount > 0) {
               const bonusFactor = 1 + (10 / movesCount);
               result *= bonusFactor;
-
-              result = Math.max(-1, Math.min(1, result)); // Forcer entre -1 et 1
-
-              console.log("Result avec Mat bonus appliqué normalisé entre -1 et 1 : " + result);
+              console.log("Mat bonus appliqué :", bonusFactor);
             }
 
           } else {
@@ -1682,10 +1644,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat = false, bestValue) {
             if (movesCount > 0) {
               const bonusFactor = 1 + (10 / movesCount);
               result *= bonusFactor;
-
-              result = Math.max(-1, Math.min(1, result)); // Forcer entre -1 et 1
-
-              console.log("Result avec Mat bonus appliqué normalisé entre -1 et 1 :", result);
+              console.log("Mat bonus appliqué :", bonusFactor);
             }
             replayBuffer.forEach(record => record.result = result);
             console.log("Historique des coups retenus pour l'entraînement :");
