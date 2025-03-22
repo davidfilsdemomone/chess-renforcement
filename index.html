@@ -1467,6 +1467,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           const moveIdx = moveToIndex[move];
           if (moveIdx !== undefined) {
             replayBuffer.push({ state: stateTensor, action: moveIdx, color: color, result: null });
+            console.log("replaybuffer count = " + replayBuffer.length);
           } else {
             console.warn("Coup non mappé :", move);
           }
@@ -1894,9 +1895,10 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           );
           
           if (!coupLegal) {
+          
             alert("Veuillez jouer un coup légal, merci !");
             return 'snapback';
-          }
+          } 
           
           // Si le coup implique une promotion, afficher la modale pour laisser l'utilisateur choisir
           const promotionMoves = moves.filter(move =>
@@ -1905,14 +1907,37 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             move.flags.indexOf('p') !== -1
           );
           
+          var human_move = '';
+
           if (promotionMoves.length > 0) {
-            showPromotionModal(source, target);
+            var promotionPiece = showPromotionModal(source, target);
+
+            human_move = source + target + promotionPiece;
+
+            const stateTensor = boardToTensor(gameInstance);
+              
+            storeMove(gameInstance, human_move, stateTensor, gameInstance.turn());           
+            
             return 'snapback'; // Annuler le déplacement en attendant le choix de promotion
+          
+          } else {
+
+            // si c'est pas une promotion
+
+            human_move = source + target;
+
+            const stateTensor = boardToTensor(gameInstance);
+            
+            storeMove(gameInstance, human_move, stateTensor, gameInstance.turn());  
           }
           
           // Si pas de promotion, jouer le coup (promotion forcée en dame par défaut)
           const move = gameInstance.move({ from: source, to: target, promotion: 'q' });
-          if (!move) return 'snapback';
+          
+          if (!move) {
+
+            return 'snapback';          
+          }
           
           board.position(gameInstance.fen());
           
@@ -1943,6 +1968,8 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
               }
             };
           });
+
+          return promotionPiece;
         }
 
         let lastNextFrameTime = Date.now();
