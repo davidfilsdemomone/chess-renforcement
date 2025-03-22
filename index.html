@@ -153,7 +153,7 @@
       // Paramètres pour la stabilité
       const LEARNING_RATE = 0.0001;
       const optimizer = tf.train.adam(LEARNING_RATE);
-      const BATCH_SIZE = 4;
+      const BATCH_SIZE = 6;
       const REWARD_SCALE = 1;
 
       // Pour la détection de match nul par nombre total de demi-coups
@@ -1487,7 +1487,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
         const epsilon = tf.scalar(1e-7);
 
         function updateModelFromBuffer() {
-          if (replayBuffer.length < BATCH_SIZE) {
+          if (replayBuffer.length <= BATCH_SIZE) {
             console.warn("Replay buffer trop petit (" + replayBuffer.length + "), mise à jour ignorée.");
             return;
           }
