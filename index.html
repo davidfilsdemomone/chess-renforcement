@@ -151,7 +151,7 @@
       var nb_parties_totales_IA = 0; // par défaut 0 parties jouées par l'ia
 
       // Paramètres pour la stabilité
-      const LEARNING_RATE = 0.0001;
+      const LEARNING_RATE = 0.001;
       const optimizer = tf.train.adam(LEARNING_RATE);
       const BATCH_SIZE = 6;
       const REWARD_SCALE = 1;
@@ -1486,7 +1486,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
         const epsilon = tf.scalar(1e-7);
 
-        function updateModelFromBuffer() {
+        function updateModelFromBuffer(mettre_buffer_vide_a_la_fin=true) {
           if (replayBuffer.length <= BATCH_SIZE) {
             console.warn("Replay buffer trop petit (" + replayBuffer.length + "), mise à jour ignorée.");
             return;
@@ -1529,14 +1529,17 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           actionsTensor.dispose();
           rewardsTensor.dispose();
           actionsOneHot.dispose();
-          replayBuffer = [];
+
+          if (mettre_buffer_vide_a_la_fin) {
+            replayBuffer = [];
+          }
         }
 
-        function updateModelAfterGame(result) {
+        function updateModelAfterGame(result, mettre_buffer_vide_a_la_fin=true) {
           replayBuffer.forEach(record => {
             record.result = result;
           });
-          updateModelFromBuffer();
+          updateModelFromBuffer(mettre_buffer_vide_a_la_fin);
         }
 
         async function playTrainingGame() {
@@ -1545,9 +1548,9 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           const maxMoves = MAX_TOTAL_MOVES;
           while (moveCount < maxMoves) {
             if (game.game_over() || interrompre_partie_en_cours_entrainement) break;
-            const stateTensor = boardToTensor(game);
             const move = await chooseMove(game);
             if (!move) break;
+            const stateTensor = boardToTensor(game);
             storeMove(game, move, stateTensor, game.turn());
             if (!customMove(game, uciToMove(move))) {
               console.log("Le coup", uciToMove(move), "n'a pas pu être joué.");
@@ -1669,8 +1672,15 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             
             document.getElementById('nb_parties_totales_IA').value = nb_parties_totales_IA;
 
-            updateModelAfterGame(result); 
-          
+            for (var i = 1; i <= 9; i++) {updateModelAfterGame(result, false);
+              // on met à false car on vide pas le buffer
+              // du replay... mais on répete 4 FOIS
+              // pour que l'ia se souvienne mieux
+              // d'un coup du berger récent... 
+            }
+
+            updateModelAfterGame(result);
+                      
             model.userDefinedMetadata = {
               nb_parties_totales: nb_parties_totales_IA
             };
@@ -1862,6 +1872,10 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           const models = await tf.io.listModels();
           console.log("Modèles présents après suppression :", models);
           model = await getOrCreateModel();
+
+          await model.save('localstorage://chess-model');
+
+          console.log("%cModèle sauvegardé dans le stockage local. nb_parties_totales_IA = " + nb_parties_totales_IA, "color:green");
         });
 
         var gameInstance, board;
@@ -2007,9 +2021,10 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           }
           let ai_move = await chooseMove(gameInstance);
           if (ai_move) {
-            const stateTensor = boardToTensor(gameInstance);
-            storeMove(gameInstance, ai_move, stateTensor, gameInstance.turn());
             customMove(gameInstance, uciToMove(ai_move));
+             const stateTensor = boardToTensor(gameInstance);
+             storeMove(gameInstance, ai_move, stateTensor, gameInstance.turn());
+           
             if (!is_entrainement) {
               await new Promise(resolve => requestAnimationFrame(resolve));
               await updateUI();
