@@ -1466,7 +1466,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
         function storeMove(game, move, stateTensor, color) {
           const moveIdx = moveToIndex[move];
           if (moveIdx !== undefined) {
-            replayBuffer.push({ state: stateTensor, action: moveIdx, color: color, result: null });
+            replayBuffer.push({ state: stateTensor, action: moveIdx, color: color, result: 200-replayBuffer.length});
             console.log("replaybuffer count = " + replayBuffer.length);
           } else {
             console.warn("Coup non mappé :", move);
@@ -1535,10 +1535,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           }
         }
 
-        function updateModelAfterGame(result, mettre_buffer_vide_a_la_fin=true) {
-          replayBuffer.forEach(record => {
-            record.result = result;
-          });
+        function updateModelAfterGame(mettre_buffer_vide_a_la_fin=true) {
           updateModelFromBuffer(mettre_buffer_vide_a_la_fin);
         }
 
@@ -1578,14 +1575,21 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
           nb_parties_totales_IA++;
 
-          for (var i = 1; i <= 9; i++) {updateModelAfterGame(result, false);
+          var i = 0;
+          replayBuffer.forEach(record => {
+            i++;
+            record.result = result / (record.result);
+            console.log("result n°" + i + " = " + record.result);
+          });
+
+          for (var i = 1; i <= 9; i++) {updateModelAfterGame(false);
               // on met à false car on vide pas le buffer
               // du replay... mais on répete 4 FOIS
               // pour que l'ia se souvienne mieux
               // d'un coup du berger récent... 
             }
 
-          updateModelAfterGame(result);
+          updateModelAfterGame();
         
           model.userDefinedMetadata = {
             nb_parties_totales: nb_parties_totales_IA
@@ -1657,10 +1661,16 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
               result *= bonusFactor;
               console.log("Mat bonus appliqué :", bonusFactor);
             }
-            replayBuffer.forEach(record => record.result = result);
+            var i = 0;
+            replayBuffer.forEach(record => {
+              i++;
+              record.result = result / (record.result);
+              console.log("result n°" + i + " = " + record.result);
+            });
+            
             console.log("Historique des coups retenus pour l'entraînement :");
             replayBuffer.forEach((item, index) => {
-              let result_bon = result;
+              let result_bon = item.result;
               console.log("Coup " + (index + 1) + ": " + indexToMove[item.action] + " bonus = " + result_bon);
             });
 
@@ -1679,14 +1689,14 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             
             document.getElementById('nb_parties_totales_IA').value = nb_parties_totales_IA;
 
-            for (var i = 1; i <= 9; i++) {updateModelAfterGame(result, false);
+            for (var i = 1; i <= 9; i++) {updateModelAfterGame(false);
               // on met à false car on vide pas le buffer
               // du replay... mais on répete 4 FOIS
               // pour que l'ia se souvienne mieux
               // d'un coup du berger récent... 
             }
 
-            updateModelAfterGame(result);
+            updateModelAfterGame();
                       
             model.userDefinedMetadata = {
               nb_parties_totales: nb_parties_totales_IA
@@ -2006,6 +2016,8 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             return new Promise(resolve => setTimeout(resolve, 0));
           
           } else if (document.getElementById('plus_rapide').checked) {
+
+            lastNextFrameTime = now;
 
             return true;
           }         
