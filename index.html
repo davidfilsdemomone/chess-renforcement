@@ -1567,7 +1567,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             if (movesCount > 0) {
               const bonusFactor = 1 + (10 / movesCount);
               result *= bonusFactor;
-              console.log("Mat bonus appliqué :", bonusFactor);
+              console.log("Mat bonus appliqué :", result);
             }
 
           } else {
@@ -1578,8 +1578,15 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
           nb_parties_totales_IA++;
 
-          updateModelAfterGame(result); 
-          
+          for (var i = 1; i <= 9; i++) {updateModelAfterGame(result, false);
+              // on met à false car on vide pas le buffer
+              // du replay... mais on répete 4 FOIS
+              // pour que l'ia se souvienne mieux
+              // d'un coup du berger récent... 
+            }
+
+          updateModelAfterGame(result);
+        
           model.userDefinedMetadata = {
             nb_parties_totales: nb_parties_totales_IA
           };
