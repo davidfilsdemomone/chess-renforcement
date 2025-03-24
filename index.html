@@ -1466,7 +1466,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
         function storeMove(game, move, stateTensor, color) {
           const moveIdx = moveToIndex[move];
           if (moveIdx !== undefined) {
-            replayBuffer.push({ state: stateTensor, action: moveIdx, color: color, result: 200-replayBuffer.length});
+            replayBuffer.push({ state: stateTensor, action: moveIdx, color: color, result: null});
             console.log("replaybuffer count = " + replayBuffer.length);
           } else {
             console.warn("Coup non mappé :", move);
@@ -1541,6 +1541,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
         async function playTrainingGame() {
           let game = initGame();
+          replayBuffer = [];
           let moveCount = 0;
           const maxMoves = MAX_TOTAL_MOVES;
           while (moveCount < maxMoves) {
@@ -1578,18 +1579,11 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           var i = 0;
           replayBuffer.forEach(record => {
             i++;
-            record.result = result / (record.result);
+            record.result = (result / (replayBuffer.length-i+1));
             console.log("result n°" + i + " = " + record.result);
           });
 
-          for (var i = 1; i <= 9; i++) {updateModelAfterGame(false);
-              // on met à false car on vide pas le buffer
-              // du replay... mais on répete 4 FOIS
-              // pour que l'ia se souvienne mieux
-              // d'un coup du berger récent... 
-            }
-
-          updateModelAfterGame();
+          updateModelAfterGame(true);
         
           model.userDefinedMetadata = {
             nb_parties_totales: nb_parties_totales_IA
@@ -1664,7 +1658,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             var i = 0;
             replayBuffer.forEach(record => {
               i++;
-              record.result = result / (record.result);
+              record.result = (result / (replayBuffer.length-i+1));
               console.log("result n°" + i + " = " + record.result);
             });
             
@@ -1689,14 +1683,14 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             
             document.getElementById('nb_parties_totales_IA').value = nb_parties_totales_IA;
 
-            for (var i = 1; i <= 9; i++) {updateModelAfterGame(false);
+            for (var i = 1; i <= 29; i++) {updateModelAfterGame(false);
               // on met à false car on vide pas le buffer
               // du replay... mais on répete 4 FOIS
               // pour que l'ia se souvienne mieux
               // d'un coup du berger récent... 
             }
 
-            updateModelAfterGame();
+            updateModelAfterGame(true);
                       
             model.userDefinedMetadata = {
               nb_parties_totales: nb_parties_totales_IA
@@ -1855,6 +1849,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
         document.getElementById('start-training2').addEventListener('click', function() {
           is_entrainement = true;
+          replayBuffer = [];
           document.getElementById('play-section').style.display = 'none';
           document.getElementById('training-section').style.display = 'block';    
           document.getElementById('totaux').value = 0;
@@ -2067,6 +2062,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           stopAI();
           gameInstance.reset();
           gameInstance.totalMoves = 0;
+          replayBuffer = [];
           board.start();
           mode = "user";
         });
@@ -2076,6 +2072,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           document.getElementById('mode-info').innerText = "Mode : IA entraînée (Noirs) vs IA réfléchissante (Blancs)";
           gameInstance.reset();
           gameInstance.totalMoves = 0;
+          replayBuffer = [];
           board.start();
           aiTimeoutId = setTimeout(aiMove, 100);
         });
