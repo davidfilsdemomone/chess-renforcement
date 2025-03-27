@@ -168,8 +168,6 @@
       var time_cumul = 0;
       var time_nb = 0;
 
-      var promotionPiece = 'q'; // reine par défaut
-
       var sauvegarder_depth = 6;
 
       var interrompre_partie_en_cours_entrainement = false;
@@ -1939,13 +1937,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
           if (promotionMoves.length > 0) {
             showPromotionModal(source, target);
-
-            human_move = source + target + promotionPiece;
-
-            const stateTensor = boardToTensor(gameInstance);
-              
-            storeMove(gameInstance, human_move, stateTensor, gameInstance.turn());           
-            
+          
             return 'snapback'; // Annuler le déplacement en attendant le choix de promotion
           
           } else {
@@ -1984,10 +1976,19 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           // Ajoute des écouteurs sur les boutons de la modale
           modal.querySelectorAll('button').forEach(button => {
             button.onclick = function() {
-              promotionPiece = this.getAttribute('data-piece');
+              const promotionPiece = this.getAttribute('data-piece');
               // Jouer le coup avec le type de promotion choisi
               const move = gameInstance.move({ from: source, to: target, promotion: promotionPiece });
               board.position(gameInstance.fen());
+
+              human_move = source + target + promotionPiece;
+
+              console.log("human_move promotion = " + human_move);
+
+              const stateTensor = boardToTensor(gameInstance);
+              
+              storeMove(gameInstance, human_move, stateTensor, gameInstance.turn());    
+
               modal.style.display = 'none';
               
               // Si c'est le tour de l'IA, déclencher son coup après un léger délai
