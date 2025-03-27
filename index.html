@@ -1563,7 +1563,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
 
             const movesCount = game.totalMoves;
             if (movesCount > 0) {
-              const bonusFactor = 1 + (10 / movesCount);
+              const bonusFactor = 1;
               result *= bonusFactor;
               console.log("Mat bonus appliqué :", result);
             }
@@ -1579,7 +1579,7 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
           var i = 0;
           replayBuffer.forEach(record => {
             i++;
-            record.result = (result / (replayBuffer.length-i+1));
+            record.result = ((10*result) / (replayBuffer.length-i+1));
             console.log("result n°" + i + " = " + record.result);
           });
 
@@ -1651,14 +1651,14 @@ function evaluatePositionHybrid2(game, ignorer_mat_and_pat=false, bestValue) {
             }
             const movesCount = gameInstance.totalMoves;
             if (movesCount > 0) {
-              const bonusFactor = 1 + (10 / movesCount);
+              const bonusFactor = 1;
               result *= bonusFactor;
               console.log("Mat bonus appliqué :", bonusFactor);
             }
             var i = 0;
             replayBuffer.forEach(record => {
               i++;
-              record.result = (result / (replayBuffer.length-i+1));
+              record.result = ((10*result) / (replayBuffer.length-i+1));
               console.log("result n°" + i + " = " + record.result);
             });
             
